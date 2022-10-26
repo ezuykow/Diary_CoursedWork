@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 public class MonthlyTask extends Task {
 
     public MonthlyTask(String title, String description, LocalDateTime time, TaskType type) {
-        super(title, description, time, type, "monthly");
+        super(title, description, time, type, RepeatType.MONTHLY);
     }
 
     @Override

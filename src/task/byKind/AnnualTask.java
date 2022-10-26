@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 public class AnnualTask extends Task {
 
     public AnnualTask(String title, String description, LocalDateTime time, TaskType type) {
-        super(title, description, time, type, "annual");
+        super(title, description, time, type, RepeatType.ANNUAL);
     }
 
     @Override

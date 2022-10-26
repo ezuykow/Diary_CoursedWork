@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 public class SingleTask extends Task {
 
     public SingleTask(String title, String description, LocalDateTime time, TaskType type) {
-        super(title, description, time, type, "single");
+        super(title, description, time, type, RepeatType.SINGLE);
     }
 
     @Override

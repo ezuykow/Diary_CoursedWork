@@ -1,5 +1,7 @@
 package task;
 
+import task.byKind.RepeatType;
+
 import java.io.Serializable;
 import java.time.LocalDateTime;
 
@@ -9,9 +11,9 @@ public abstract class Task implements Serializable {
     private final LocalDateTime time;
     private final TaskType type;
     private boolean isDeleted;
-    private String repeatType;
+    private final RepeatType repeatType;
 
-    public Task(String title, String description, LocalDateTime time, TaskType type, String repeatType) {
+    public Task(String title, String description, LocalDateTime time, TaskType type, RepeatType repeatType) {
         this.title = title;
         this.description = description;
         this.time = time;
@@ -52,6 +54,10 @@ public abstract class Task implements Serializable {
 
     public TaskType getType() {
         return type;
+    }
+
+    public RepeatType getRepeatType() {
+        return repeatType;
     }
 
     public String toString() {

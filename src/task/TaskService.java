@@ -1,93 +1,68 @@
 package task;
 
 import menu.Menu;
+import task.byKind.RepeatType;
+import task.taskServiceUtil.ConsoleWorker;
+import task.taskServiceUtil.FileWorker;
 import task.taskServiceUtil.NewTask;
 
-import java.io.*;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 public class TaskService {
 
-    private static int ID;
+    private static int task_id;
 
-    private static Map<Integer, Task> tasks;
+    private static final Map<Integer, Task> tasks;
     private static Map<Integer, Task> deletedTasks;
-    private static final File tasksFile;
-    private static final File deletedTasksFile;
 
     static {
-        tasksFile = new File("src/task/taskServiceUtil/TaskStorage.bin");
-        try (var ois = new ObjectInputStream(new FileInputStream(tasksFile))){
-            tasks = (HashMap<Integer, Task>) ois.readObject();
-        } catch (IOException | ClassNotFoundException e) {
-            tasks = new HashMap<>();
-        }
-        tasks.keySet().stream().max(Integer::compareTo).ifPresent(m -> ID = m);
-
-        deletedTasksFile = new File("src/task/taskServiceUtil/DeletedTaskStorage.bin");
-        try (var ois = new ObjectInputStream(new FileInputStream(deletedTasksFile))){
-            deletedTasks = (HashMap<Integer, Task>) ois.readObject();
-        } catch (IOException | ClassNotFoundException e) {
-            deletedTasks = new HashMap<>();
-        }
+        tasks = FileWorker.getTasksFromFile();
+        tasks.keySet().stream().max(Integer::compareTo).ifPresent(m -> task_id = m);
+        deletedTasks = FileWorker.getDeletedTasksFromFile();
     }
 
     private TaskService() {}
 
     public static void createNewTask() {
-        tasks.put(++ID, NewTask.getNewTask());
-        refreshTasksFile();
+        tasks.put(++task_id, NewTask.getNewTask());
+        FileWorker.refreshTasksFile(tasks);
         System.out.println("New task  added successfully!");
         Menu.show();
     }
 
     public static void deleteTask() {
-        if (tasks.isEmpty()) {
-            System.out.println("Tasks not found!");
-            Menu.show();
-        } else {
-            int id = waitValidIdOrZero();
-            if (id == 0) {
-                Menu.show();
-            } else {
-                deletedTasks.put(id, tasks.get(id));
-                tasks.remove(id);
-                refreshDeletedTaskFile();
-                refreshTasksFile();
+        if (isTasksListNotEmpty(tasks)) {
+            int id = ConsoleWorker.waitValidIdOrZeroForDelete(tasks);
+            if (id != 0) {
+                deletedTasks.put(id, tasks.remove(id));
+                FileWorker.refreshFiles(tasks, deletedTasks);
                 System.out.println("Task deleted successfully!");
-                Menu.show();
             }
         }
+        Menu.show();
     }
 
-    private static int waitValidIdOrZero() {
-        int id = -1;
-        Scanner in = new Scanner(System.in);
-        while (!tasks.containsKey(id)) {
-            System.out.println("Select the desired task:");
-            showIdsAndTitles(tasks);
-            System.out.println("Enter 0 to return to the menu");
-            id = in.nextInt();
-            if (id == 0) return 0;
+    private static boolean isTasksListNotEmpty(Map<Integer, Task> map) {
+        if (map.isEmpty()) {
+            System.out.println("Tasks not found!");
+            return false;
         }
-        return id;
+        return true;
     }
 
     public static void getGroupedByDaysTasks() {
-        if (tasks.isEmpty()) {
-            System.out.println("Tasks not found!");
-        } else {
+        if (isTasksListNotEmpty(tasks)) {
             Set<LocalDate> ld = getUniqueDates();
             for (LocalDate date : ld) {
                 System.out.println("Tasks for " + date + ":");
-                showTasksByDay(date);
+                ConsoleWorker.showIdsAndTitlesForDay(tasks, date);
             }
+            showInfo(tasks);
+        } else {
+            Menu.show();
         }
-        showInfo(tasks);
     }
 
     private static Set<LocalDate> getUniqueDates() {
@@ -100,85 +75,92 @@ public class TaskService {
     }
 
     public static void getTasksByDay(){
-        String day = "";
-        Scanner in = new Scanner(System.in);
-        while (!day.matches("\\d{2}\\.\\d{2}\\.\\d{4}")) {
-            System.out.println("Enter a date (format DD.MM.YYYY) or 0 to return:");
-            day = in.nextLine();
-            if (day.equals("0")) {
-                Menu.show();
-                return;
-            }
+        String day = ConsoleWorker.waitValidDateOrZero();
+        if (day.equals("0")) {
+            Menu.show();
+            return;
         }
-        LocalDate ld = parseDate(day);
+        LocalDate ld = LocalDate.parse(day, DateTimeFormatter.ofPattern("dd.MM.yyyy"));
         showTasksByDay(ld);
         showInfo(tasks);
     }
 
     private static void showTasksByDay(LocalDate ld) {
-        boolean isEmpty = true;
-        for (Map.Entry<Integer, Task> e : tasks.entrySet()) {
-            if (e.getValue().getTime().toLocalDate().equals(ld)) {
-                isEmpty = false;
-                System.out.println(
-                        "   " + e.getKey() + ". " + e.getValue().getTitle()
-                );
-            }
+        Map<Integer, Task> map = findTasksForDay(ld);
+        if (isTasksListNotEmpty(map)) {
+            System.out.println("Tasks for " + ld + ":");
+            ConsoleWorker.showIdsAndTitles(map);
+            showInfo(map);
+        } else {
+            Menu.show();
         }
-        if (isEmpty) System.out.println("Tasks not found!");
     }
 
-    private static LocalDate parseDate(String s) {
-        String[] parts = s.split("\\.");
-        return LocalDate.of(Integer.parseInt(parts[2]),
-                Integer.parseInt(parts[1]), Integer.parseInt(parts[0]));
+    private static Map<Integer, Task> findTasksForDay(LocalDate ld) {
+        Map<Integer, Task> map = new HashMap<>();
+        for (Map.Entry<Integer, Task> e : tasks.entrySet()) {
+            if (checkTaskForDay(e.getValue(), ld)) {
+                map.put(e.getKey(), e.getValue());
+            }
+        }
+        return map;
+    }
+
+    private static boolean checkTaskForDay(Task task, LocalDate ld) {
+        LocalDate taskDate = task.getTime().toLocalDate();
+        if (taskDate.isAfter(ld)) return false;
+        while (taskDate.isBefore(ld) || taskDate.equals(ld)) {
+            if (taskDate.equals(ld)) return true;
+            if (task.getRepeatType().equals(RepeatType.SINGLE)) return false;
+            taskDate = getNextDate(task, taskDate);
+        }
+        return false;
+    }
+
+    private static LocalDate getNextDate(Task task, LocalDate ld) {
+        switch (task.getRepeatType()) {
+            case DAILY:
+                return ld.plusDays(1);
+            case WEEKLY:
+                return ld.plusWeeks(1);
+            case MONTHLY:
+                return ld.plusMonths(1);
+            case ANNUAL:
+                return ld.plusYears(1);
+            default:
+                return ld;
+        }
     }
 
     public static void showDeletedTasks() {
-        if (deletedTasks.isEmpty()) {
-            System.out.println("Tasks not found!");
-            Menu.show();
-        } else {
-            showIdsAndTitles(deletedTasks);
+        if (isTasksListNotEmpty(deletedTasks)) {
+            ConsoleWorker.showIdsAndTitles(deletedTasks);
             showInfo(deletedTasks);
+            return;
         }
+        Menu.show();
     }
 
     public static void dropDeleted() {
         deletedTasks = new HashMap<>();
-        refreshDeletedTaskFile();
+        FileWorker.refreshDeletedTaskFile(deletedTasks);
         System.out.println("Drop successful!");
         Menu.show();
     }
 
     public static void showAll() {
-        if (tasks.isEmpty()) {
-            System.out.println("Tasks not found!");
-            Menu.show();
-        } else {
-            showIdsAndTitles(tasks);
+        if (isTasksListNotEmpty(tasks)) {
+            ConsoleWorker.showIdsAndTitles(tasks);
             showInfo(tasks);
+            return;
         }
-    }
-
-    private static void showIdsAndTitles(Map<Integer, Task> map) {
-        map.forEach((k, v) -> System.out.println(
-                "   " + k + ". " + v.getTitle() + ", " + v.getTime()
-        ));
+        Menu.show();
     }
 
     private static void showInfo(Map<Integer, Task> map) {
-        Scanner in = new Scanner(System.in);
-        int id = -1;
-        while (!map.containsKey(id)) {
-            System.out.println("Enter a 0 to return to menu or id to show info of task:");
-            id = in.nextInt();
-            if (id == 0) {
-                Menu.show();
-                return;
-            }
-        }
-        showInfoById(id, map);
+        int id = ConsoleWorker.waitValidIdOrZeroForShow(map);
+        if (id == 0) Menu.show();
+        else showInfoById(id, map);
     }
 
     private static void showInfoById(int id, Map<Integer, Task> map) {
@@ -188,13 +170,7 @@ public class TaskService {
     }
 
     private static void editOrReturn(int id, Map<Integer, Task> map) {
-        System.out.println("-------------------------------------");
-        Scanner in = new Scanner(System.in);
-        int choose = -1;
-        while (choose < 0 || choose > 2) {
-            System.out.println("Enter a 0 to return, 1 to edit title or 2 to edit description:");
-            choose = in.nextInt();
-        }
+        int choose = ConsoleWorker.waitChooseForEdit();
         switch (choose) {
             case 0:
                 Menu.show();
@@ -208,38 +184,14 @@ public class TaskService {
     }
 
     private static void editTitle(int id, Map<Integer, Task> map) {
-        Scanner in = new Scanner(System.in);
-        System.out.println("Enter a new title:");
-        String newTitle = in.nextLine();
-        map.get(id).setTitle(newTitle);
-        refreshTasksFile();
-        refreshDeletedTaskFile();
+        map.get(id).setTitle(ConsoleWorker.waitNewTitle());
+        FileWorker.refreshFiles(tasks, deletedTasks);
         showInfoById(id, map);
     }
 
     private static void editDescription(int id, Map<Integer, Task> map) {
-        Scanner in = new Scanner(System.in);
-        System.out.println("Enter a new description:");
-        String newDesc = in.nextLine();
-        map.get(id).setDescription(newDesc);
-        refreshTasksFile();
-        refreshDeletedTaskFile();
+        map.get(id).setDescription(ConsoleWorker.waitNewDescription());
+        FileWorker.refreshFiles(tasks, deletedTasks);
         showInfoById(id, map);
-    }
-
-    private static void refreshTasksFile() {
-        try (var oos = new ObjectOutputStream(new FileOutputStream(tasksFile))) {
-            oos.writeObject(tasks);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    private static void refreshDeletedTaskFile() {
-        try (var oos = new ObjectOutputStream(new FileOutputStream(deletedTasksFile))) {
-            oos.writeObject(deletedTasks);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
     }
 }
