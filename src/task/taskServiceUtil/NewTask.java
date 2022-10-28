@@ -12,7 +12,7 @@ public class NewTask {
 
     private final Task newTask;
 
-    public NewTask() {
+    private NewTask() {
         int repeatType = waitRepeatType();
         newTask = createRepeatableTask(repeatType, waitTaskType(),
                 waitTitle(), waitDescription(), waitDateTime());

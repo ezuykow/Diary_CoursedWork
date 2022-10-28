@@ -109,26 +109,23 @@ public class TaskService {
     private static boolean checkTaskForDay(Task task, LocalDate ld) {
         LocalDate taskDate = task.getTime().toLocalDate();
         if (taskDate.isAfter(ld)) return false;
-        while (taskDate.isBefore(ld) || taskDate.equals(ld)) {
-            if (taskDate.equals(ld)) return true;
-            if (task.getRepeatType().equals(RepeatType.SINGLE)) return false;
-            taskDate = getNextDate(task, taskDate);
-        }
-        return false;
+        return checkTaskForDayByType(task.getRepeatType(), taskDate, ld);
     }
 
-    private static LocalDate getNextDate(Task task, LocalDate ld) {
-        switch (task.getRepeatType()) {
+    private static boolean checkTaskForDayByType(RepeatType rt, LocalDate taskDate, LocalDate ld) {
+        switch (rt) {
+            case SINGLE:
+                return taskDate.equals(ld);
             case DAILY:
-                return ld.plusDays(1);
+                return taskDate.isBefore(ld.plusDays(1));
             case WEEKLY:
-                return ld.plusWeeks(1);
+                return taskDate.isBefore(ld.plusDays(1)) && taskDate.getDayOfWeek().equals(ld.getDayOfWeek());
             case MONTHLY:
-                return ld.plusMonths(1);
+                return taskDate.isBefore(ld.plusDays(1)) && taskDate.getDayOfMonth() == ld.getDayOfMonth();
             case ANNUAL:
-                return ld.plusYears(1);
+                return taskDate.isBefore(ld.plusDays(1)) && taskDate.getDayOfYear() == ld.getDayOfYear();
             default:
-                return ld;
+                return false;
         }
     }
 
